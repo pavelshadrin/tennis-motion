@@ -10,16 +10,14 @@ import SwiftUI
 import HealthKit
 import WatchConnectivity
 
-enum RecordingState {
+private enum RecordingState {
     case idle
     case active
 }
 
-class Model: NSObject, ObservableObject, WCSessionDelegate {
-    var session: HKWorkoutSession?
+final class Model: NSObject, ObservableObject, WCSessionDelegate {
+    var workoutSession: HKWorkoutSession?
     var builder: HKLiveWorkoutBuilder?
-
-    var lastSessionStartDate: Date?
     
     func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
         if let e = error {
@@ -44,7 +42,6 @@ struct ContentView: View {
                 state == .idle ? self.startWorkout(workoutType: .tennis) : self.stopCurrentWorkout()
             }
         }
-        .padding()
         .navigationTitle("Tennis Motion Data")
         .onAppear {
             self.requestAuthorization()
@@ -60,16 +57,14 @@ struct ContentView: View {
         guard CMBatchedSensorManager.isAccelerometerSupported && CMBatchedSensorManager.isDeviceMotionSupported else {
             return
         }
-        
-        model.lastSessionStartDate = Date()
-        
+                
         let configuration = HKWorkoutConfiguration()
         configuration.activityType = workoutType
         configuration.locationType = .outdoor
 
         do {
-            model.session = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
-            model.builder = model.session?.associatedWorkoutBuilder()
+            model.workoutSession = try HKWorkoutSession(healthStore: healthStore, configuration: configuration)
+            model.builder = model.workoutSession?.associatedWorkoutBuilder()
         } catch {
             return
         }
@@ -80,7 +75,7 @@ struct ContentView: View {
         )
 
         let startDate = Date()
-        model.session?.startActivity(with: startDate)
+        model.workoutSession?.startActivity(with: startDate)
         model.builder?.beginCollection(withStart: startDate) { (success, error) in
             if success {
                 self.state = .active
@@ -89,9 +84,8 @@ struct ContentView: View {
             Task {
                 do {
                     for try await data in CMBatchedSensorManager().accelerometerUpdates() {
-                        let tennisSession = TennisSession(dateStarted: Date(), dateFinished: Date(), accelerometerData: data, gyroscopeData: [])
-                        
-                        sendToiPhone(tennisSession: tennisSession)
+                        let dataChunk = TennisDataChunk(date: Date(), accelerometerData: data, gyroscopeData: [])
+                        sendToiPhone(dataChunk: dataChunk)
                     }
                 } catch let error as NSError {
                     print("\(error)")
@@ -101,9 +95,8 @@ struct ContentView: View {
             Task {
                 do {
                     for try await data in CMBatchedSensorManager().deviceMotionUpdates() {
-                        let tennisSession = TennisSession(dateStarted: Date(), dateFinished: Date(), accelerometerData: [], gyroscopeData: data)
-                        
-                        sendToiPhone(tennisSession: tennisSession)
+                        let dataChunk = TennisDataChunk(date: Date(), accelerometerData: [], gyroscopeData: data)
+                        sendToiPhone(dataChunk: dataChunk)
                     }
                 } catch let error as NSError {
                     print("\(error)")
@@ -112,8 +105,8 @@ struct ContentView: View {
         }
     }
     
-    private func sendToiPhone(tennisSession: TennisSession) {
-        let dict: [String : Any] = ["data": tennisSession.encodeIt()]
+    private func sendToiPhone(dataChunk: TennisDataChunk) {
+        let dict: [String : Any] = ["data": dataChunk.encodeIt()]
         session.sendMessage(dict, replyHandler: { reply in
             print("Got reply from iPhone")
         }, errorHandler: { error in
@@ -128,7 +121,7 @@ struct ContentView: View {
         CMBatchedSensorManager().stopDeviceMotionUpdates()
     }
     
-    func requestAuthorization() {
+    private func requestAuthorization() {
         let typesToShare: Set = [
             HKQuantityType.workoutType()
         ]

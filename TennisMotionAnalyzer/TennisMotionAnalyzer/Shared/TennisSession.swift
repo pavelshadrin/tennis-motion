@@ -8,43 +8,41 @@
 import Foundation
 import CoreMotion
 
-struct SessionAccelerometerSnapshot: Codable {
+struct AccelerometerSnapshot: Codable {
     let timestamp: TimeInterval
     let accelerationX: Double
     let accelerationY: Double
     let accelerationZ: Double
 }
 
-struct SessionGyroscopeSnapshot: Codable {
+struct GyroscopeSnapshot: Codable {
     let timestamp: TimeInterval
     let rotationX: Double
     let rotationY: Double
     let rotationZ: Double
 }
 
-struct SessionMotionData: Codable {
-    let accelerometerSnapshots: [SessionAccelerometerSnapshot]
-    let gyroscopeSnapshots: [SessionGyroscopeSnapshot]
+struct TennisMotionData: Codable {
+    let accelerometerSnapshots: [AccelerometerSnapshot]
+    let gyroscopeSnapshots: [GyroscopeSnapshot]
 }
 
-struct TennisSession: Codable {
-    let dateStarted: Date
-    let dateFinished: Date
-    let sessionData: SessionMotionData
+struct TennisDataChunk: Codable {
+    let date: Date
+    let data: TennisMotionData
     
-    init(dateStarted: Date, dateFinished: Date, accelerometerData: [CMAccelerometerData], gyroscopeData: [CMDeviceMotion]) {
-        self.dateStarted = dateStarted
-        self.dateFinished = dateFinished
+    init(date: Date, accelerometerData: [CMAccelerometerData], gyroscopeData: [CMDeviceMotion]) {
+        self.date = date
         
         let accSnapshots = accelerometerData.map { data in
-            SessionAccelerometerSnapshot(timestamp: data.timestamp, accelerationX: data.acceleration.x, accelerationY: data.acceleration.y, accelerationZ: data.acceleration.z)
+            AccelerometerSnapshot(timestamp: data.timestamp, accelerationX: data.acceleration.x, accelerationY: data.acceleration.y, accelerationZ: data.acceleration.z)
         }
         
         let gyrSnapshots = gyroscopeData.map { data in
-            SessionGyroscopeSnapshot(timestamp: data.timestamp, rotationX: data.rotationRate.x, rotationY: data.rotationRate.y, rotationZ: data.rotationRate.z)
+            GyroscopeSnapshot(timestamp: data.timestamp, rotationX: data.rotationRate.x, rotationY: data.rotationRate.y, rotationZ: data.rotationRate.z)
         }
         
-        self.sessionData = SessionMotionData(accelerometerSnapshots: accSnapshots, gyroscopeSnapshots: gyrSnapshots)
+        self.data = TennisMotionData(accelerometerSnapshots: accSnapshots, gyroscopeSnapshots: gyrSnapshots)
     }
     
     func encodeIt() -> Data {
@@ -56,28 +54,24 @@ struct TennisSession: Codable {
         return Data()
     }
     
-    static func decodeIt(_ data: Data) -> TennisSession {        
+    static func decodeIt(_ data: Data) -> TennisDataChunk {
         let decoder = JSONDecoder()
-        if let decoded = try? decoder.decode(TennisSession.self, from: data) {
+        if let decoded = try? decoder.decode(TennisDataChunk.self, from: data) {
             return decoded
         }
         
-        return TennisSession(dateStarted: Date(), dateFinished: Date(), accelerometerData: [], gyroscopeData: [])
+        return TennisDataChunk(date: Date(), accelerometerData: [], gyroscopeData: [])
     }
     
-    func createAcceletometerDataCSV(includeHeader: Bool = true) -> String {
-        var csvString = includeHeader ? "\("Timestamp"),\("X"),\("Y"),\("Z")\n\n" : ""
-        for snapshot in sessionData.accelerometerSnapshots {
-            csvString = csvString.appending("\(snapshot.timestamp),\(snapshot.accelerationX),\(snapshot.accelerationY),\(snapshot.accelerationZ)\n")
+    func createAcceletometerDataCSV() -> String {
+        data.accelerometerSnapshots.reduce("") { partialResult, snapshot in
+            partialResult + "\(snapshot.timestamp),\(snapshot.accelerationX),\(snapshot.accelerationY),\(snapshot.accelerationZ)\n"
         }
-        return csvString
     }
     
-    func createGyroscopeDataCSV(includeHeader: Bool = true) -> String {
-        var csvString = includeHeader ? "\("Timestamp"),\("X"),\("Y"),\("Z")\n\n" : ""
-        for snapshot in sessionData.gyroscopeSnapshots {
-            csvString = csvString.appending("\(snapshot.timestamp),\(snapshot.rotationX),\(snapshot.rotationY),\(snapshot.rotationZ)\n")
+    func createGyroscopeDataCSV() -> String {
+        data.gyroscopeSnapshots.reduce("") { partialResult, snapshot in
+            partialResult + "\(snapshot.timestamp),\(snapshot.rotationX),\(snapshot.rotationY),\(snapshot.rotationZ)\n"
         }
-        return csvString
     }
 }

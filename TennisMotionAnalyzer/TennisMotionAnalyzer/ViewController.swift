@@ -11,8 +11,15 @@ import WatchConnectivity
 class ViewController: UIViewController {
     @IBOutlet weak var tableView: UITableView!
     
+    private let dateFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .medium
+        return formatter
+    }()
+    
     let session = WCSession.default
-    private var tennisSessions = [TennisSession]() {
+    private var tennisDataChunks = [TennisDataChunk]() {
         didSet {
             tableView.reloadData()
         }
@@ -49,11 +56,25 @@ class ViewController: UIViewController {
         self.present(alert, animated: true, completion: nil)
     }
     
+    @objc func clearAll() {
+        let alert = UIAlertController(title: "Clear all recent data", message: nil, preferredStyle: .actionSheet)
+        
+        alert.addAction(UIAlertAction(title: "Clear", style: .destructive , handler:{ [weak self] _ in
+            self?.tennisDataChunks = []
+        }))
+        
+        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler:nil))
+        
+        self.present(alert, animated: true, completion: nil)
+    }
+    
+    // MARK: - Private
+    
     private func exportAccelerometerData() {
         var result = ""
-        for session in tennisSessions {
-            if !session.sessionData.accelerometerSnapshots.isEmpty {
-                result.append("\n\(session.createAcceletometerDataCSV(includeHeader: false))")
+        for chunk in tennisDataChunks {
+            if !chunk.data.accelerometerSnapshots.isEmpty {
+                result.append("\n\(chunk.createAcceletometerDataCSV())")
             }
         }
         
@@ -62,9 +83,9 @@ class ViewController: UIViewController {
     
     private func exportGyroscopeData() {
         var result = ""
-        for session in tennisSessions {
-            if !session.sessionData.gyroscopeSnapshots.isEmpty {
-                result.append("\n\(session.createGyroscopeDataCSV(includeHeader: false))")
+        for chunk in tennisDataChunks {
+            if !chunk.data.gyroscopeSnapshots.isEmpty {
+                result.append("\n\(chunk.createGyroscopeDataCSV())")
             }
         }
         
@@ -89,37 +110,29 @@ class ViewController: UIViewController {
         }
     }
     
-    @objc func clearAll() {
-        let alert = UIAlertController(title: "Clear all recent data", message: nil, preferredStyle: .actionSheet)
-        
-        alert.addAction(UIAlertAction(title: "Clear", style: .destructive , handler:{ [weak self] _ in
-            self?.tennisSessions = []
-        }))
-        
-        alert.addAction(UIAlertAction(title: "Cancel", style: .cancel, handler:nil))
-        
-        self.present(alert, animated: true, completion: nil)
+    private func getDocumentsDirectory() -> String {
+        let paths = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)
+        let documentsDirectory = paths[0]
+        return documentsDirectory
     }
 }
 
 extension ViewController: UITableViewDataSource, UITableViewDelegate {
-    
     func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
-        tennisSessions.count
+        tennisDataChunks.count
     }
-    
     
     func tableView(_ tableView: UITableView, cellForRowAt indexPath: IndexPath) -> UITableViewCell {
         let cell = UITableViewCell(style: .default, reuseIdentifier: "TennisSessionCell")
-        let session = tennisSessions[indexPath.row]
+        let chunk = tennisDataChunks[indexPath.row]
         
         let title: String
-        if session.sessionData.accelerometerSnapshots.count > 0 && session.sessionData.gyroscopeSnapshots.isEmpty {
-            title = "Acceletometer at \(String(describing: session.dateStarted))"
-        } else if session.sessionData.gyroscopeSnapshots.count > 0 && session.sessionData.accelerometerSnapshots.isEmpty {
-            title = "Rotation at \(String(describing: session.dateStarted))"
+        if !chunk.data.accelerometerSnapshots.isEmpty && chunk.data.gyroscopeSnapshots.isEmpty {
+            title = "Acceletometer at \(dateFormatter.string(from: chunk.date))"
+        } else if !chunk.data.gyroscopeSnapshots.isEmpty && chunk.data.accelerometerSnapshots.isEmpty {
+            title = "Rotation at \(dateFormatter.string(from: chunk.date))"
         } else {
-            title = "Mixed data at \(String(describing: session.dateStarted))"
+            title = "Mixed data at \(dateFormatter.string(from: chunk.date))"
         }
         cell.textLabel?.text = title
         return cell
@@ -127,12 +140,6 @@ extension ViewController: UITableViewDataSource, UITableViewDelegate {
     
     func tableView(_ tableView: UITableView, didSelectRowAt indexPath: IndexPath) {
         // TODO: present chart
-    }
-    
-    private func getDocumentsDirectory() -> String {
-        let paths = NSSearchPathForDirectoriesInDomains(.documentDirectory, .userDomainMask, true)
-        let documentsDirectory = paths[0]
-        return documentsDirectory
     }
 }
 
@@ -142,20 +149,12 @@ extension ViewController: WCSessionDelegate {
             print("session activation failed with error: \(error.localizedDescription)")
         }
     }
-  
-    func session(_ session: WCSession, didReceiveMessage message: [String : Any]) {
-        guard let data: Data = message["data"] as? Data else { return }
-        let tennisSession = TennisSession.decodeIt(data)
-        DispatchQueue.main.async {
-            self.tennisSessions.append(tennisSession)
-        }
-    }
     
     func session(_ session: WCSession, didReceiveMessage message: [String : Any], replyHandler: @escaping ([String : Any]) -> Void) {
         guard let data: Data = message["data"] as? Data else { return }
-        let tennisSession = TennisSession.decodeIt(data)
+        let chunk = TennisDataChunk.decodeIt(data)
         DispatchQueue.main.async {
-            self.tennisSessions.append(tennisSession)
+            self.tennisDataChunks.append(chunk)
         }
     }
         
