@@ -128,7 +128,7 @@ extension ViewController: UITableViewDataSource, UITableViewDelegate {
         
         let title: String
         if !chunk.data.accelerometerSnapshots.isEmpty && chunk.data.gyroscopeSnapshots.isEmpty {
-            title = "Acceletometer at \(dateFormatter.string(from: chunk.date))"
+            title = "Accelerometer at \(dateFormatter.string(from: chunk.date))"
         } else if !chunk.data.gyroscopeSnapshots.isEmpty && chunk.data.accelerometerSnapshots.isEmpty {
             title = "Rotation at \(dateFormatter.string(from: chunk.date))"
         } else {
