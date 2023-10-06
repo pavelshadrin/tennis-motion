@@ -41,7 +41,7 @@ class ViewController: UIViewController {
     }
     
     @objc func exportAll() {
-        let alert = UIAlertController(title: "Export aggregated data", message: "Select which king of data to share", preferredStyle: .actionSheet)
+        let alert = UIAlertController(title: "Export aggregated data", message: "Select which kind of data to share", preferredStyle: .actionSheet)
         
         alert.addAction(UIAlertAction(title: "Accelerometer", style: .default , handler:{ [weak self] _ in
             self?.exportAccelerometerData()
